@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebGIS Suwon — Point of Interest</title>
+  <meta name="description" content="Peta interaktif menampilkan lokasi fasilitas kesehatan dan tempat publik di Suwon, Korea Selatan." />
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ──────────── Reset & Base ──────────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0f0c29 0%, #1a1a3e 40%, #24243e 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: #e0e0e0;
+    }
+
+    /* ──────────── Header / Title ──────────── */
+    .header {
+      width: 100%;
+      max-width: 1200px;
+      padding: 28px 24px 16px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 6px;
+    }
+
+    .header p {
+      font-size: 0.92rem;
+      color: #94a3b8;
+      font-weight: 400;
+    }
+
+    /* ──────────── Map Container ──────────── */
+    .map-wrapper {
+      width: 94%;
+      max-width: 1200px;
+      height: 72vh;
+      min-height: 420px;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.06),
+        0 12px 40px rgba(0,0,0,0.55),
+        0 0 80px rgba(96,165,250,0.08);
+      position: relative;
+      margin-bottom: 32px;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+
+    /* ──────────── Legend Panel ──────────── */
+    .legend {
+      position: absolute;
+      bottom: 28px;
+      right: 16px;
+      z-index: 1000;
+      background: rgba(15, 12, 41, 0.88);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 14px;
+      padding: 16px 20px;
+      min-width: 180px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+    }
+
+    .legend h4 {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+      margin-bottom: 12px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #cbd5e1;
+      margin-bottom: 8px;
+    }
+
+    .legend-item:last-child { margin-bottom: 0; }
+
+    .legend-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 0 8px rgba(0,0,0,0.3);
+    }
+
+    .legend-dot.red  { background: #ef4444; box-shadow: 0 0 10px rgba(239,68,68,0.45); }
+    .legend-dot.blue { background: #3b82f6; box-shadow: 0 0 10px rgba(59,130,246,0.45); }
+
+    /* ──────────── Stats Bar ──────────── */
+    .stats-bar {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 2px;
+      margin-bottom: 10px;
+    }
+
+    .stat-chip {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 24px;
+      padding: 6px 18px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .stat-chip:hover {
+      transform: translateY(-2px);
+      background: rgba(255,255,255,0.10);
+    }
+
+    .stat-chip .count {
+      font-weight: 800;
+      color: #e2e8f0;
+    }
+
+    .stat-chip .dot-sm {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    /* ──────────── Leaflet Popup Override ──────────── */
+    .leaflet-popup-content-wrapper {
+      background: rgba(15, 12, 41, 0.92) !important;
+      backdrop-filter: blur(12px) !important;
+      -webkit-backdrop-filter: blur(12px) !important;
+      border: 1px solid rgba(255,255,255,0.10) !important;
+      border-radius: 12px !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+      color: #e2e8f0 !important;
+      padding: 0 !important;
+    }
+
+    .leaflet-popup-content {
+      margin: 0 !important;
+      padding: 14px 18px !important;
+      font-family: 'Inter', sans-serif !important;
+      font-size: 0.88rem !important;
+      line-height: 1.55 !important;
+    }
+
+    .leaflet-popup-tip {
+      background: rgba(15, 12, 41, 0.92) !important;
+      border: 1px solid rgba(255,255,255,0.08) !important;
+    }
+
+    .popup-name {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 4px;
+      color: #f1f5f9;
+    }
+
+    .popup-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 8px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .popup-badge.healthcare {
+      background: rgba(239,68,68,0.18);
+      color: #fca5a5;
+      border: 1px solid rgba(239,68,68,0.30);
+    }
+
+    .popup-badge.public {
+      background: rgba(59,130,246,0.18);
+      color: #93c5fd;
+      border: 1px solid rgba(59,130,246,0.30);
+    }
+
+    /* ──────────── Footer ──────────── */
+    .footer {
+      width: 94%;
+      max-width: 1200px;
+      text-align: center;
+      padding: 0 24px 28px;
+      margin-top: -16px;
+    }
+
+    .footer p {
+      font-size: 0.78rem;
+      color: #64748b;
+      font-weight: 400;
+      letter-spacing: 0.01em;
+    }
+
+    .footer a {
+      color: #60a5fa;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer a:hover {
+      color: #93c5fd;
+      text-decoration: underline;
+    }
+
+    /* ──────────── Layer Control Override ──────────── */
+    .leaflet-control-layers {
+      background: rgba(15, 12, 41, 0.88) !important;
+      backdrop-filter: blur(14px) !important;
+      -webkit-backdrop-filter: blur(14px) !important;
+      border: 1px solid rgba(255,255,255,0.10) !important;
+      border-radius: 12px !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.45) !important;
+      color: #cbd5e1 !important;
+      padding: 8px 14px !important;
+    }
+
+    .leaflet-control-layers-toggle {
+      width: 36px !important;
+      height: 36px !important;
+      border-radius: 10px !important;
+      background-color: rgba(15, 12, 41, 0.88) !important;
+      border: 1px solid rgba(255,255,255,0.10) !important;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
+    }
+
+    .leaflet-control-layers-expanded {
+      padding: 12px 16px 10px !important;
+    }
+
+    .leaflet-control-layers label {
+      font-family: 'Inter', sans-serif !important;
+      font-size: 0.82rem !important;
+      font-weight: 500 !important;
+      color: #cbd5e1 !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 6px !important;
+      margin-bottom: 4px !important;
+    }
+
+    .leaflet-control-layers-separator {
+      border-top-color: rgba(255,255,255,0.08) !important;
+    }
+
+    /* ──────────── Responsive ──────────── */
+    @media (max-width: 600px) {
+      .header h1 { font-size: 1.35rem; }
+      .map-wrapper { height: 65vh; border-radius: 12px; width: 97%; }
+      .legend { bottom: 12px; right: 8px; padding: 12px 14px; min-width: 150px; }
+      .footer { width: 97%; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ──────── Header ──────── -->
+  <header class="header">
+    <h1>🗺️ WebGIS Suwon — Point of Interest</h1>
+    <p>Peta interaktif fasilitas kesehatan & tempat publik di Kota Suwon, Korea Selatan</p>
+  </header>
+
+  <!-- ──────── Stats ──────── -->
+  <div class="stats-bar" id="statsBar"></div>
+
+  <!-- ──────── Map ──────── -->
+  <div class="map-wrapper">
+    <div id="map"></div>
+
+    <!-- Legend -->
+    <div class="legend">
+      <h4>Legenda</h4>
+      <div class="legend-item">
+        <span class="legend-dot red"></span> Healthcare
+      </div>
+      <div class="legend-item">
+        <span class="legend-dot blue"></span> Public
+      </div>
+    </div>
+  </div>
+
+  <!-- ──────── Footer ──────── -->
+  <footer class="footer">
+    <p>Data source: <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">OpenStreetMap</a> (via HOT Export Tools)</p>
+  </footer>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    /* ─── Initialise Map ─── */
+    const map = L.map('map', {
+      center: [37.275, 127.035],
+      zoom: 13,
+      zoomControl: false
+    });
+
+    // Zoom control — top-right
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+    // Tile layer — CartoDB Dark Matter for sleek aesthetic
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 19
+    }).addTo(map);
+
+    /* ─── Custom circle-marker icon factory ─── */
+    function createIcon(color) {
+      const fill    = color === 'red' ? '#ef4444' : '#3b82f6';
+      const glow    = color === 'red' ? 'rgba(239,68,68,0.45)' : 'rgba(59,130,246,0.45)';
+      const border  = color === 'red' ? '#fca5a5' : '#93c5fd';
+
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="42" viewBox="0 0 32 42">
+          <defs>
+            <filter id="g-${color}" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="2" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <path d="M16 2 C9 2 3 8 3 15 C3 25 16 40 16 40 C16 40 29 25 29 15 C29 8 23 2 16 2Z"
+                fill="${fill}" stroke="${border}" stroke-width="1.4"
+                filter="url(#g-${color})" opacity="0.92"/>
+          <circle cx="16" cy="15" r="5.5" fill="white" opacity="0.9"/>
+        </svg>`;
+
+      return L.icon({
+        iconUrl: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
+        iconSize: [32, 42],
+        iconAnchor: [16, 42],
+        popupAnchor: [0, -36]
+      });
+    }
+
+    const iconRed  = createIcon('red');
+    const iconBlue = createIcon('blue');
+
+    /* ─── Layer Groups ─── */
+    const healthcareLayer = L.layerGroup().addTo(map);
+    const publicLayer     = L.layerGroup().addTo(map);
+
+    /* ─── Load GeoJSON ─── */
+    fetch('data/suwon_poi.geojson')
+      .then(res => {
+        if (!res.ok) throw new Error('Gagal memuat GeoJSON');
+        return res.json();
+      })
+      .then(data => {
+        let healthcareCount = 0;
+        let publicCount = 0;
+        const allMarkers = [];
+
+        L.geoJSON(data, {
+          pointToLayer: (feature, latlng) => {
+            const jenis = (feature.properties.jenis || '').toLowerCase();
+            const icon  = jenis === 'healthcare' ? iconRed : iconBlue;
+
+            if (jenis === 'healthcare') healthcareCount++;
+            else publicCount++;
+
+            const marker = L.marker(latlng, { icon });
+            allMarkers.push(marker);
+
+            // Add to the correct layer group
+            if (jenis === 'healthcare') healthcareLayer.addLayer(marker);
+            else publicLayer.addLayer(marker);
+
+            return marker;
+          },
+          onEachFeature: (feature, layer) => {
+            const p     = feature.properties;
+            const jenis = (p.jenis || 'unknown').toLowerCase();
+            const label = jenis === 'healthcare' ? 'Healthcare' : 'Public';
+
+            layer.bindPopup(`
+              <div class="popup-name">${p.nama || 'Tanpa Nama'}</div>
+              <span class="popup-badge ${jenis}">${label}</span>
+            `);
+          }
+        });
+
+        // Fit bounds from all markers
+        if (allMarkers.length > 0) {
+          const group = L.featureGroup(allMarkers);
+          map.fitBounds(group.getBounds().pad(0.12));
+        }
+
+        // Layer control
+        const overlays = {
+          '🔴 Healthcare': healthcareLayer,
+          '🔵 Public': publicLayer
+        };
+        L.control.layers(null, overlays, { position: 'topleft', collapsed: false }).addTo(map);
+
+        // Update stats bar
+        renderStats(healthcareCount, publicCount);
+      })
+      .catch(err => {
+        console.error(err);
+        document.getElementById('statsBar').innerHTML =
+          '<div class="stat-chip" style="color:#fca5a5;">⚠️ Gagal memuat data GeoJSON</div>';
+      });
+
+    /* ─── Render Stats Chips ─── */
+    function renderStats(hc, pub) {
+      const total = hc + pub;
+      document.getElementById('statsBar').innerHTML = `
+        <div class="stat-chip">
+          <span class="count">${total}</span> Total POI
+        </div>
+        <div class="stat-chip">
+          <span class="dot-sm" style="background:#ef4444;"></span>
+          <span class="count">${hc}</span> Healthcare
+        </div>
+        <div class="stat-chip">
+          <span class="dot-sm" style="background:#3b82f6;"></span>
+          <span class="count">${pub}</span> Public
+        </div>
+      `;
+    }
+  </script>
+
+</body>
+</html>
